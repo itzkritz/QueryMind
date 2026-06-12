@@ -1,0 +1,36 @@
+# Environment variables - NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Node modules (client)
+client/node_modules/
+node_modules/
+
+# Build outputs
+client/dist/
+client/.cache/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE / OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Large data files (re-import from source)
+sales/
