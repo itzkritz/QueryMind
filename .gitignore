@@ -34,3 +34,10 @@ Thumbs.db
 
 # Large data files (re-import from source)
 sales/
+
+# SQLite uploaded databases and temp files
+server/uploads/
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
