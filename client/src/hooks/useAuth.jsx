@@ -1,134 +1,152 @@
 /**
  * useAuth.jsx
  * -----------
- * Authentication context that wraps Supabase Auth.
- *
- * Supports:
- *   - Email / password sign-in & sign-up
- *   - Google OAuth (redirects via Supabase)
- *   - Automatic JWT token forwarding (stored as "supabase_token")
- *   - Graceful offline / demo mode when Supabase is not configured
+ * Hybrid auth context:
+ *   - Email/password → QueryMind custom backend (/api/auth/signup, /api/auth/signin)
+ *   - Google OAuth   → Supabase OAuth redirect (token stored and validated by backend)
  */
 
 import { useState, useEffect, createContext, useContext, useCallback } from "react"
 import { supabase, isSupabaseReady } from "@/lib/supabaseClient"
 
+const API_BASE = "http://127.0.0.1:8000"
+
 const AuthContext = createContext(null)
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function sessionToUser(session) {
-  if (!session?.user) return null
-  return {
-    id:     session.user.id,
-    email:  session.user.email,
-    name:   session.user.user_metadata?.full_name || session.user.email,
-    avatar: session.user.user_metadata?.avatar_url || null,
-  }
-}
 
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }) {
   const [user,    setUser]    = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState(null)
 
-  // Sync token helper
-  const syncToken = useCallback((session) => {
-    if (session?.access_token) {
-      localStorage.setItem("supabase_token", session.access_token)
-    } else {
-      localStorage.removeItem("supabase_token")
+  // Helper: persist session from a Supabase OAuth callback
+  function applySupabaseSession(session) {
+    if (!session?.user) return
+    const token = session.access_token
+    const userData = {
+      id:     session.user.id,
+      email:  session.user.email,
+      name:   session.user.user_metadata?.full_name || session.user.email,
+      avatar: session.user.user_metadata?.avatar_url || null,
     }
-    setUser(sessionToUser(session))
-  }, [])
+    localStorage.setItem("qm_token", token)
+    localStorage.setItem("qm_user",  JSON.stringify(userData))
+    setUser(userData)
+  }
 
+  // On mount: restore from localStorage OR detect Supabase OAuth redirect
   useEffect(() => {
-    if (!isSupabaseReady) {
-      // Demo mode — treat as authenticated with a placeholder user
-      setUser({ id: "demo", email: "demo@querymind.dev", name: "Demo User" })
+    // 1. Try our own stored session first
+    const token   = localStorage.getItem("qm_token")
+    const stored  = localStorage.getItem("qm_user")
+    if (token && stored) {
+      try { setUser(JSON.parse(stored)) } catch { /* ignore */ }
       setLoading(false)
       return
     }
 
-    // Restore session on page load
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      syncToken(session)
-      setLoading(false)
-    })
+    // 2. Check if Supabase has an OAuth session (post-redirect)
+    if (isSupabaseReady) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) applySupabaseSession(session)
+        setLoading(false)
+      })
 
-    // Listen for auth state changes (sign-in, sign-out, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      syncToken(session)
-    })
+      // Listen for future Supabase auth changes (token refresh, sign-out)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session) {
+          applySupabaseSession(session)
+        } else if (!localStorage.getItem("qm_user")) {
+          // Only clear if it's not a custom-auth session
+          setUser(null)
+        }
+      })
+      return () => subscription.unsubscribe()
+    }
 
-    return () => subscription.unsubscribe()
-  }, [syncToken])
-
-  // ── Auth Actions ────────────────────────────────────────────────────────────
-
-  const signIn = useCallback(async ({ email, password }) => {
-    if (!isSupabaseReady) return { error: "Supabase not configured" }
-    setError(null)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError(error.message)
-    return { error }
+    setLoading(false)
   }, [])
+
+  // ── Email / Password (custom backend) ───────────────────────────────────────
 
   const signUp = useCallback(async ({ email, password }) => {
-    if (!isSupabaseReady) return { error: "Supabase not configured" }
-    setError(null)
-    const { error } = await supabase.auth.signUp({ email, password })
-    if (error) setError(error.message)
-    return { error }
-  }, [])
-
-  const signInWithGoogle = useCallback(async () => {
-    if (!isSupabaseReady) return { error: "Supabase not configured" }
-    setError(null)
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
-    })
-    if (error) setError(error.message)
-    return { error }
-  }, [])
-
-  const signOut = useCallback(async () => {
-    if (isSupabaseReady) await supabase.auth.signOut()
-    localStorage.removeItem("supabase_token")
-    setUser(null)
-  }, [])
-
-  // Legacy compat
-  const login  = useCallback((token) => {
-    localStorage.setItem("supabase_token", token)
     try {
-      const payload = JSON.parse(atob(token.split(".")[1]))
-      setUser({ id: payload.sub, email: payload.email || "user@querymind.dev", name: payload.email })
+      const res = await fetch(`${API_BASE}/api/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await res.json()
+      if (!res.ok) return { error: data.detail || "Sign up failed." }
+
+      const userData = { id: data.user_id, email: data.email, name: data.email }
+      localStorage.setItem("qm_token", data.access_token)
+      localStorage.setItem("qm_user",  JSON.stringify(userData))
+      setUser(userData)
+      return { error: null }
     } catch {
-      setUser({ id: "user", email: "user@querymind.dev", name: "User" })
+      return { error: "Could not reach server. Is the backend running?" }
     }
   }, [])
 
-  const logout = signOut
+  const signIn = useCallback(async ({ email, password }) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/signin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await res.json()
+      if (!res.ok) return { error: data.detail || "Sign in failed." }
+
+      const userData = { id: data.user_id, email: data.email, name: data.email }
+      localStorage.setItem("qm_token", data.access_token)
+      localStorage.setItem("qm_user",  JSON.stringify(userData))
+      setUser(userData)
+      return { error: null }
+    } catch {
+      return { error: "Could not reach server. Is the backend running?" }
+    }
+  }, [])
+
+  // ── Google OAuth (Supabase redirect flow) ────────────────────────────────────
+
+  const signInWithGoogle = useCallback(async () => {
+    if (!isSupabaseReady) {
+      return { error: "Supabase is not configured. Cannot use Google sign-in." }
+    }
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin },
+      })
+      if (error) return { error: error.message || "Google sign-in failed." }
+      return { error: null }
+    } catch (e) {
+      return { error: e.message || "Google sign-in failed." }
+    }
+  }, [])
+
+  // ── Sign Out ─────────────────────────────────────────────────────────────────
+
+  const signOut = useCallback(async () => {
+    localStorage.removeItem("qm_token")
+    localStorage.removeItem("qm_user")
+    if (isSupabaseReady) await supabase.auth.signOut().catch(() => {})
+    setUser(null)
+  }, [])
 
   return (
     <AuthContext.Provider value={{
       user,
       loading,
-      error,
+      error: null,
       isAuthenticated: !!user,
       isSupabaseReady,
       signIn,
       signUp,
       signInWithGoogle,
       signOut,
-      login,   // legacy compat
-      logout,
     }}>
       {children}
     </AuthContext.Provider>

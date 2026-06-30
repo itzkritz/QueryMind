@@ -45,6 +45,20 @@ export default function QueryForm({ provider, selectedDbId, onResult, sessionId,
     },
   })
 
+  // Listen for re-run requests dispatched by the Re-run button in ResultsPanel
+  useEffect(() => {
+    const handler = (e) => {
+      const q = e.detail?.question
+      if (!q || !selectedDbId) return
+      setValue("question", q)
+      setTimeout(() => mutation.mutate({ question: q }), 80)
+    }
+    window.addEventListener("qm:prefill", handler)
+    return () => window.removeEventListener("qm:prefill", handler)
+  // mutation is stable across renders (TanStack Query guarantee)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDbId, mutation])
+
   const onSubmit = (data) => {
     if (!selectedDbId) return
     if (!data.question?.trim()) return

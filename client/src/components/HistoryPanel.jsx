@@ -3,6 +3,7 @@ import { fetchHistory } from "@/lib/api"
 import { motion, AnimatePresence } from "framer-motion"
 import { Clock, CheckCircle2, XCircle, Cpu, ChevronRight, History } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { useAuth } from "@/hooks/useAuth"
 
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr + "Z").getTime()
@@ -15,10 +16,12 @@ function timeAgo(dateStr) {
 }
 
 export default function HistoryPanel({ onSelect }) {
+  const { user } = useAuth()
   const { data: history, isLoading } = useQuery({
-    queryKey: ["history"],
+    queryKey: ["history", user?.id],
     queryFn: () => fetchHistory(15),
     refetchInterval: 15000,
+    enabled: !!user?.id,
   })
 
   return (

@@ -6,7 +6,7 @@ Updated QueryHistory model with user_id, database_id, and execution_time.
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -22,6 +22,7 @@ class QueryHistory(Base):
 
     question        = Column(Text, nullable=False)
     generated_sql   = Column(Text, nullable=True)
+    sql_explanation = Column(JSON, nullable=True)                            # Structured plain-English explanation
     model_used      = Column(String(100), nullable=False, default="gemini")  # e.g. "gemini", "ollama/qwen2.5-coder:1.5b"
     execution_time  = Column(Float, nullable=True)                           # Seconds
     status          = Column(String(20), nullable=False, default="success")  # "success" | "error"

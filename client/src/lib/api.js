@@ -3,7 +3,7 @@ const API_BASE = "http://127.0.0.1:8000";
 
 function getHeaders() {
   const headers = { "Content-Type": "application/json" };
-  const token = localStorage.getItem("supabase_token");
+  const token = localStorage.getItem("qm_token");
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
@@ -135,3 +135,13 @@ export async function fetchDatabaseSchema(dbId) {
   if (!res.ok) throw new Error("Failed to fetch schema catalog");
   return res.json();
 }
+
+export async function deleteHistorySession(sessionId) {
+  const res = await fetch(`${API_BASE}/api/history/session/${sessionId}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to delete conversation session");
+  return res.json();
+}
+

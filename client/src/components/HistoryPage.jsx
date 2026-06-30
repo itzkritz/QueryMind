@@ -4,10 +4,13 @@ import { fetchHistory } from "@/lib/api"
 import { motion } from "framer-motion"
 import {
   Clock, CheckCircle2, XCircle, Cpu, ChevronRight, Search, 
-  Database, Copy, Check, MessageSquare, Terminal, ExternalLink
+  Database, Copy, Check, MessageSquare, Terminal, ExternalLink,
+  Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { useAuth } from "@/hooks/useAuth"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr + "Z").getTime()
@@ -20,14 +23,17 @@ function timeAgo(dateStr) {
 }
 
 export default function HistoryPage({ databases, onRestoreSession }) {
+  const { user } = useAuth()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedSessionId, setSelectedSessionId] = useState(null)
   const [copiedId, setCopiedId] = useState(null)
+  const [activeExplanation, setActiveExplanation] = useState(null)
 
   const { data: history, isLoading } = useQuery({
-    queryKey: ["history"],
+    queryKey: ["history", user?.id],
     queryFn: () => fetchHistory(100),
     refetchInterval: 15000,
+    enabled: !!user?.id,
   })
 
   // Group history items by session_id
@@ -219,21 +225,34 @@ export default function HistoryPage({ databases, onRestoreSession }) {
 
                     {/* Generated SQL block */}
                     {item.generated_sql && (
-                      <div className="rounded-xl border border-violet-500/20 bg-violet-950/20 overflow-hidden">
-                        <div className="flex items-center justify-between px-4 py-2 border-b border-violet-500/15">
-                          <span className="text-[10px] font-bold text-violet-300 uppercase tracking-widest flex items-center gap-1">
+                      <div className="rounded-xl border border-red-200 dark:border-violet-500/20 bg-red-100/40 dark:bg-violet-950/20 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2 border-b border-red-200 dark:border-violet-500/15 gap-2">
+                          <span className="text-[10px] font-bold text-red-700 dark:text-violet-300 uppercase tracking-widest flex items-center gap-1">
                             <Terminal className="w-3 h-3" /> Generated SQL Query
                           </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleCopy(item.generated_sql, item.id)}
-                            className="w-6 h-6 rounded hover:bg-violet-500/25 text-violet-300 hover:text-white"
-                          >
-                            {copiedId === item.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                          </Button>
+                          <div className="flex items-center gap-1.5">
+                            {item.sql_explanation && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setActiveExplanation(item)}
+                                className="h-6 text-[10px] flex items-center gap-0.5 text-red-600 dark:text-violet-400 hover:bg-red-200 dark:hover:bg-violet-500/25 px-2 py-0.5 rounded font-bold"
+                              >
+                                <Sparkles className="w-3 h-3" />
+                                Explain SQL
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleCopy(item.generated_sql, item.id)}
+                              className="w-6 h-6 rounded hover:bg-red-200 dark:hover:bg-violet-500/25 text-red-500 dark:text-violet-300 hover:text-red-900 dark:hover:text-white"
+                            >
+                              {copiedId === item.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                            </Button>
+                          </div>
                         </div>
-                        <pre className="p-4 text-xs font-mono text-emerald-300 overflow-x-auto whitespace-pre-wrap leading-relaxed bg-[#0c0a0f]/40">
+                        <pre className="p-4 text-xs font-mono text-black dark:text-emerald-300 overflow-x-auto whitespace-pre-wrap leading-relaxed bg-red-100/20 dark:bg-[#0c0a0f]/40">
                           {item.generated_sql}
                         </pre>
                       </div>
@@ -250,6 +269,105 @@ export default function HistoryPage({ databases, onRestoreSession }) {
           </div>
         )}
       </div>
+
+      {/* Explanation Sheet */}
+      <Sheet open={activeExplanation !== null} onOpenChange={(open) => { if (!open) setActiveExplanation(null) }}>
+        <SheetContent className="overflow-y-auto">
+          <SheetHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+              <SheetTitle>SQL Explanation</SheetTitle>
+            </div>
+            <SheetDescription>
+              Plain-English structural breakdown of the historical query.
+            </SheetDescription>
+          </SheetHeader>
+
+          {activeExplanation?.sql_explanation ? (
+            <div className="mt-6 space-y-6">
+              {/* Question Context */}
+              <div className="rounded-lg border border-border bg-accent/5 p-3">
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest block mb-0.5">
+                  Question
+                </span>
+                <p className="text-xs text-foreground font-medium">{activeExplanation.question}</p>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 space-y-1.5">
+                <h4 className="text-xs font-bold text-primary uppercase tracking-wider">Summary</h4>
+                <p className="text-sm text-foreground leading-relaxed">
+                  {activeExplanation.sql_explanation.summary}
+                </p>
+              </div>
+
+              {/* Tables Used */}
+              {activeExplanation.sql_explanation.tables_used && activeExplanation.sql_explanation.tables_used.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Tables Used</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeExplanation.sql_explanation.tables_used.map((table) => (
+                      <Badge key={table} variant="outline" className="bg-background text-xs font-semibold px-2 py-0.5 border-border text-foreground">
+                        {table}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Joins */}
+              {activeExplanation.sql_explanation.joins && activeExplanation.sql_explanation.joins.toLowerCase() !== "none" && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Joins</h4>
+                  <p className="text-sm text-foreground bg-accent/10 border border-border/40 rounded-lg p-3 leading-relaxed">
+                    {activeExplanation.sql_explanation.joins}
+                  </p>
+                </div>
+              )}
+
+              {/* Filters */}
+              {activeExplanation.sql_explanation.filters && activeExplanation.sql_explanation.filters.toLowerCase() !== "none" && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Filters</h4>
+                  <p className="text-sm text-foreground bg-accent/10 border border-border/40 rounded-lg p-3 leading-relaxed">
+                    {activeExplanation.sql_explanation.filters}
+                  </p>
+                </div>
+              )}
+
+              {/* Aggregations */}
+              {activeExplanation.sql_explanation.aggregations && activeExplanation.sql_explanation.aggregations.length > 0 && 
+               !(activeExplanation.sql_explanation.aggregations.length === 1 && activeExplanation.sql_explanation.aggregations[0].toLowerCase() === "none") && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Aggregations</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeExplanation.sql_explanation.aggregations.map((agg) => (
+                      <Badge key={agg} variant="outline" className="bg-background text-xs font-semibold px-2 py-0.5 border-border text-foreground">
+                        {agg}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sorting / Grouping */}
+              {activeExplanation.sql_explanation.sorting_grouping && activeExplanation.sql_explanation.sorting_grouping.toLowerCase() !== "none" && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Sorting & Grouping</h4>
+                  <p className="text-sm text-foreground bg-accent/10 border border-border/40 rounded-lg p-3 leading-relaxed">
+                    {activeExplanation.sql_explanation.sorting_grouping}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-8 flex flex-col items-center justify-center text-muted-foreground text-center p-6 bg-accent/5 rounded-xl border border-dashed border-border/60">
+              <Terminal className="w-8 h-8 text-muted-foreground/30 mb-2" />
+              <p className="text-sm font-semibold">No explanation available</p>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

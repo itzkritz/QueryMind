@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-background: var(--bg-main);
   --color-foreground: var(--text-main);
@@ -30,12 +32,12 @@
 
 /* ── LIGHT MODE (Red & Beige / Warm Cream) ─────────────────────────────────── */
 .light {
-  --bg-main: #faf7f2;
-  --bg-sidebar: #f5efe6;
-  --bg-card: #ffffff;
-  --bg-card-hover: #faf8f5;
-  --text-main: #1c1917;
-  --text-muted: #686156;
+  --bg-main: #f9f6f0;      /* Premium light warm beige */
+  --bg-sidebar: #f2ebe1;  /* Sand beige for sidebar */
+  --bg-card: #fcfbf9;     /* Cream/Ivory for card background */
+  --bg-card-hover: #f7f1e5;
+  --text-main: #201a15;   /* Very dark brown/black for rich contrast */
+  --text-muted: #736b62;  /* Muted warm taupe */
   --text-inverse: #ffffff;
   --border-main: rgba(220, 38, 38, 0.12);
   --border-focus: #dc2626;

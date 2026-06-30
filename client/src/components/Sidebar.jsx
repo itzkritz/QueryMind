@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { fetchDatabases, fetchDatabaseSchema, refreshSchema, fetchHealth, deleteDatabase } from "@/lib/api"
+import { fetchDatabases, fetchDatabaseSchema, refreshSchema, fetchHealth, deleteDatabase, fetchHistory, deleteHistorySession } from "@/lib/api"
 import { Database, Cpu, Wifi, WifiOff, ChevronRight, Key, Plus, RefreshCw, Layers, MessageSquare, History, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/hooks/useAuth"
 
 const TYPE_COLORS = {
   integer: "text-blue-500 dark:text-blue-400",
@@ -44,6 +45,7 @@ export default function Sidebar({
   onSessionSelect
 }) {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
 
   // API Health status
   const { data: health } = useQuery({
@@ -55,15 +57,17 @@ export default function Sidebar({
 
   // List connected databases
   const { data: databases, isLoading: dbsLoading } = useQuery({
-    queryKey: ["databases"],
+    queryKey: ["databases", user?.id],
     queryFn: fetchDatabases,
+    enabled: !!user?.id,
   })
 
   // Fetch recent queries history
   const { data: history } = useQuery({
-    queryKey: ["history"],
+    queryKey: ["history", user?.id],
     queryFn: () => fetchHistory(20),
     refetchInterval: 15000,
+    enabled: !!user?.id,
   })
 
   // Get schema for selected database
@@ -92,6 +96,23 @@ export default function Sidebar({
       alert(err.message || "Failed to remove database connection")
     }
   })
+
+  const deleteSessionMutation = useMutation({
+    mutationFn: (sessId) => deleteHistorySession(sessId),
+    onSuccess: (_, sessId) => {
+      queryClient.invalidateQueries({ queryKey: ["history"] })
+      if (sessId === currentSessionId) {
+        onNewChat()
+      }
+    },
+    onError: (err) => {
+      alert(err.message || "Failed to delete conversation")
+    }
+  })
+
+  const handleDeleteSession = (sessId) => {
+    deleteSessionMutation.mutate(sessId)
+  }
 
   const isOnline = !!health
   const activeDb = databases?.find(d => d.id === selectedDbId)
@@ -178,21 +199,39 @@ export default function Sidebar({
           {sidebarSessions.map(session => {
             const isActive = session.id === currentSessionId && activeView === "console"
             return (
-              <button
+              <div
                 key={session.id}
-                onClick={() => {
-                  onSessionSelect(session)
-                  onViewChange("console")
-                }}
-                className={`w-full text-left text-xs px-2.5 py-1.5 rounded truncate transition-colors flex items-center gap-2 border ${
+                className={`group flex items-center justify-between rounded border text-xs transition-colors ${
                   isActive
-                    ? "bg-primary/10 text-primary font-bold border-primary/20"
-                    : "text-muted-foreground hover:bg-accent/40 hover:text-foreground border-transparent"
+                    ? "bg-primary/10 border-primary/20"
+                    : "border-transparent hover:bg-accent/40"
                 }`}
               >
-                <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
-                <span className="truncate">{session.title}</span>
-              </button>
+                <button
+                  onClick={() => {
+                    onSessionSelect(session)
+                    onViewChange("console")
+                  }}
+                  className={`flex-1 text-left px-2.5 py-1.5 truncate flex items-center gap-2 ${
+                    isActive ? "text-primary font-bold" : "text-muted-foreground group-hover:text-foreground"
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
+                  <span className="truncate">{session.title}</span>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (confirm("Are you sure you want to delete this conversation?")) {
+                      handleDeleteSession(session.id)
+                    }
+                  }}
+                  className="mr-1.5 p-1 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                  title="Delete conversation"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             )
           })}
           {sidebarSessions.length === 0 && (

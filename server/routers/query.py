@@ -14,10 +14,12 @@ from sqlalchemy.orm import Session
 from database import get_db
 from security import get_current_user
 from config import settings
-from schemas.query import QueryRequest, QueryResponse, HistoryItem
+from schemas.query import QueryRequest, QueryResponse, HistoryItem, ChartMeta, SQLExplanation
 from models.query_history import QueryHistory
 from services.database_registry import get_database, get_current_catalog
 from services.connection_manager import connection_manager
+from services.chart_recommender import ChartRecommender
+from services.sql_explainer import SQLExplainerService
 from connectors.factory import build_connector
 
 # LLM imports
@@ -129,6 +131,7 @@ def run_query(
     error = None
     validated = False
     rows = []
+    sql_explanation = None
 
     try:
         prompt = SYSTEM_PROMPT.format(schema=schema_text, question=request.question, max_rows=settings.MAX_ROWS)
@@ -143,12 +146,24 @@ def run_query(
 
     execution_time = round(time.time() - start, 2)
 
+    # Generate SQL explanation only if validation passed, query was built, and no error occurred
+    if validated and not error and sql:
+        try:
+            sql_explanation = SQLExplainerService.explain(sql, request.question, schema_text, request.provider)
+        except Exception as expl_exc:
+            print(f"Explanation generation error (non-fatal): {expl_exc}")
+
+    # ── Chart recommendation ──────────────────────────────────────────────────
+    chart_meta_dict = ChartRecommender.recommend(rows, sql, request.question)
+    chart_meta = ChartMeta(**chart_meta_dict)
+
     # Persist to history
     entry = QueryHistory(
         user_id=owner_id,
         database_id=db_record.id,
         question=request.question,
         generated_sql=sql,
+        sql_explanation=sql_explanation,
         model_used=model_used,
         execution_time=execution_time,
         status="success" if not error else "error",
@@ -169,6 +184,8 @@ def run_query(
         model_used=model_used,
         session_id=entry.session_id,
         session_title=entry.session_title,
+        chart_meta=chart_meta,
+        sql_explanation=sql_explanation,
     )
 
 
@@ -185,3 +202,20 @@ def get_history(
         .limit(limit)
         .all()
     )
+
+
+@router.delete("/history/session/{session_id}")
+def delete_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    owner_id: str = Depends(get_current_user),
+):
+    # Delete all query history items under this session_id for the owner
+    deleted_count = (
+        db.query(QueryHistory)
+        .filter(QueryHistory.session_id == session_id, QueryHistory.user_id == owner_id)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {"message": "Session deleted successfully", "deleted_count": deleted_count}
+

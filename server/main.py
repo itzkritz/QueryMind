@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import Base, engine
 import models  # noqa: F401 — registers all ORM models with Base
 
-from routers import databases_router, schema_router, query_router
+from routers import databases_router, schema_router, query_router, auth_router
 from schemas.common import HealthResponse
 
 # Self-healing database schema: Drop query_history table if it lacks the new user_id column
@@ -24,15 +24,28 @@ if "query_history" in inspector.get_table_names():
         with engine.connect() as conn:
             conn.execute(text("DROP TABLE IF EXISTS query_history CASCADE"))
             conn.commit()
-    elif "session_id" not in cols:
-        print("Migrating schema: Adding session_id and session_title columns to query_history table...")
-        with engine.connect() as conn:
-            try:
-                conn.execute(text("ALTER TABLE query_history ADD COLUMN session_id VARCHAR(255)"))
-                conn.execute(text("ALTER TABLE query_history ADD COLUMN session_title VARCHAR(255)"))
-                conn.commit()
-            except Exception as e:
-                print(f"Migration error (non-fatal): {e}")
+    else:
+        # Add session columns if missing
+        if "session_id" not in cols:
+            print("Migrating schema: Adding session_id and session_title columns to query_history table...")
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text("ALTER TABLE query_history ADD COLUMN session_id VARCHAR(255)"))
+                    conn.execute(text("ALTER TABLE query_history ADD COLUMN session_title VARCHAR(255)"))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Migration error (session_id column add failed): {e}")
+
+        # Check columns again to handle case where session_id check added them or didn't
+        cols_now = [c["name"] for c in inspector.get_columns("query_history")]
+        if "sql_explanation" not in cols_now:
+            print("Migrating schema: Adding sql_explanation column to query_history table...")
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text("ALTER TABLE query_history ADD COLUMN sql_explanation JSON"))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Migration error (sql_explanation column add failed): {e}")
 
 # Create all metadata tables in Supabase on startup
 Base.metadata.create_all(bind=engine)
@@ -62,6 +75,7 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(auth_router)
 app.include_router(databases_router)
 app.include_router(schema_router)
 app.include_router(query_router)

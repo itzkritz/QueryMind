@@ -47,39 +47,50 @@ def get_current_user(authorization: Optional[str] = Header(default=None)) -> str
     """
     FastAPI dependency that extracts the authenticated user ID.
 
-    - If AUTH_REQUIRED=false (development mode): returns a fixed dev user ID.
-    - If AUTH_REQUIRED=true: validates the Supabase JWT and returns the sub claim.
+    Priority:
+    1. If a Bearer token is provided, try decoding with our OWN JWT secret first (custom auth).
+    2. Then try the Supabase JWT secret as fallback.
+    3. If no token and AUTH_REQUIRED=false → return dev user ID.
+    4. Otherwise raise 401.
     """
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[len("Bearer "):]
+
+        # ── Try our own JWT first ──────────────────────────────────────────────
+        own_secret = settings.ENCRYPTION_KEY
+        if own_secret:
+            try:
+                payload = jwt.decode(token, own_secret, algorithms=["HS256"])
+                user_id: str = payload.get("sub", "")
+                if user_id:
+                    return user_id
+            except JWTError:
+                pass  # Not our token — try Supabase next
+
+        # ── Try Supabase JWT ───────────────────────────────────────────────────
+        supabase_secret = settings.SUPABASE_JWT_SECRET
+        if supabase_secret:
+            try:
+                payload = jwt.decode(
+                    token,
+                    supabase_secret,
+                    algorithms=["HS256"],
+                    options={"verify_aud": False},
+                )
+                user_id = payload.get("sub", "")
+                if user_id:
+                    return user_id
+            except JWTError as e:
+                if settings.AUTH_REQUIRED:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail=f"Invalid or expired token: {e}",
+                    )
+
     if not settings.AUTH_REQUIRED:
         return DEV_USER_ID
 
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header. Expected: Bearer <token>",
-        )
-
-    token = authorization[len("Bearer "):]
-    secret = settings.SUPABASE_JWT_SECRET
-    if not secret:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="SUPABASE_JWT_SECRET is not configured on the server.",
-        )
-
-    try:
-        payload = jwt.decode(
-            token,
-            secret,
-            algorithms=["HS256"],
-            options={"verify_aud": False},  # Supabase does not always include aud
-        )
-        user_id: str = payload.get("sub", "")
-        if not user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing user ID (sub).")
-        return user_id
-    except JWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid or expired token: {e}",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Missing or invalid Authorization header.",
+    )

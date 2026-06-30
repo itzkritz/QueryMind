@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Zap, Plus, Sun, Moon, Sparkles, Layers, History, Database, LogOut, Loader2, MessageSquare } from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { fetchDatabases, fetchHistory } from "@/lib/api"
 import { useAuth } from "@/hooks/useAuth"
 import Sidebar from "@/components/Sidebar"
@@ -23,6 +23,7 @@ function generateUuid() {
 
 export default function App() {
   const { user, loading, isAuthenticated, signOut } = useAuth()
+  const queryClient = useQueryClient()
   const [provider, setProvider] = useState("gemini")
   const [selectedDbId, setSelectedDbId] = useState("")
   const [isConnectOpen, setIsConnectOpen] = useState(false)
@@ -46,20 +47,31 @@ export default function App() {
     localStorage.setItem("theme", theme)
   }, [theme])
 
+  // Clear local states and query cache when user switches (sign-in or sign-out)
+  useEffect(() => {
+    setSelectedDbId("")
+    setSessionsMap({})
+    setSessionId(generateUuid())
+    setSessionTitle("")
+    queryClient.clear()
+  }, [user?.id, queryClient])
+
   const toggleTheme = () => {
     setTheme(prev => (prev === "dark" ? "light" : "dark"))
   }
 
   // Fetch databases to auto-select
   const { data: databases } = useQuery({
-    queryKey: ["databases"],
+    queryKey: ["databases", user?.id],
     queryFn: fetchDatabases,
+    enabled: !!user?.id,
   })
 
   // Fetch history from API
   const { data: history } = useQuery({
-    queryKey: ["history"],
+    queryKey: ["history", user?.id],
     queryFn: () => fetchHistory(100),
+    enabled: !!user?.id,
   })
 
   // Sync database history to frontend session state
@@ -74,12 +86,15 @@ export default function App() {
         grouped[sId].push({
           question: item.question,
           sql: item.generated_sql,
-          rows: [], // Rows are not saved in server history table (which is standard)
+          rows: [], // Rows are not persisted server-side — user can re-run to reload
           error: item.status === "error" ? "Query failed" : null,
           validated: item.status === "success",
           execution_time: item.execution_time,
           model_used: item.model_used,
-          id: item.id
+          sql_explanation: item.sql_explanation || null,
+          chart_meta: null, // Not persisted server-side
+          id: item.id,
+          isHistoryItem: true, // Flag: rows unavailable, can re-run
         })
       })
 
@@ -143,6 +158,8 @@ export default function App() {
         validated: queryResult.validated,
         execution_time: queryResult.execution_time,
         model_used: queryResult.model_used,
+        chart_meta: queryResult.chart_meta,
+        sql_explanation: queryResult.sql_explanation || null,
         id: Date.now()
       }
       return {
@@ -150,6 +167,14 @@ export default function App() {
         [sessionId]: [...currentList, newQueryItem]
       }
     })
+  }
+
+  // Re-run a previous query from history (to restore rows/chart)
+  const handleRerunQuery = async (question) => {
+    if (!question || !selectedDbId) return
+    // Submit as a new query in the current session — QueryForm handles the API call,
+    // so we dispatch a custom event that QueryForm listens for
+    window.dispatchEvent(new CustomEvent('qm:prefill', { detail: { question } }))
   }
 
   // Show spinner while auth state resolves
@@ -163,7 +188,7 @@ export default function App() {
 
   // Show landing page when not signed in
   if (!isAuthenticated) {
-    return <LandingPage />
+    return <LandingPage theme={theme} toggleTheme={toggleTheme} />
   }
 
   const activeSessionMessages = sessionsMap[sessionId] || []
@@ -297,7 +322,7 @@ export default function App() {
                             Query #{originalIndex} {index === 0 && <span className="text-primary font-normal text-[10px] ml-1.5 lowercase tracking-normal bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded">(latest)</span>}
                           </h3>
                         </div>
-                        <ResultsPanel result={msg} />
+                        <ResultsPanel result={msg} onRerun={handleRerunQuery} />
                       </motion.div>
                     )
                   })}
