@@ -4,15 +4,16 @@ import pandas as pd
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables relative to project root
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+load_dotenv(dotenv_path=os.path.join(ROOT_DIR, ".env"))
 
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "postgres")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
-SALES_DATA_DIR = os.getenv("SALES_DATA_DIR", "./sales")
+SALES_DATA_DIR = os.getenv("SALES_DATA_DIR", os.path.join(ROOT_DIR, "sales"))
 
 missing = [k for k, v in {
     "DB_HOST": DB_HOST, 
@@ -55,7 +56,7 @@ def import_table(file_name, table_name, rename_dict=None):
 
 def run_schema_setup():
     print("Running schema_setup.sql DDL script to initialize tables...")
-    sql_file_path = os.path.join("sql", "schema_setup.sql")
+    sql_file_path = os.path.join(ROOT_DIR, "sql", "schema_setup.sql")
     if not os.path.exists(sql_file_path):
         print(f"Error: {sql_file_path} not found.")
         sys.exit(1)

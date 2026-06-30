@@ -4,8 +4,9 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables relative to project root
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+load_dotenv(dotenv_path=os.path.join(ROOT_DIR, ".env"))
 
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT", "5432")
@@ -155,8 +156,8 @@ if __name__ == "__main__":
         
     schema_desc = generate_schema_text(columns, pk_dict, fk_dict)
     
-    # Save schema text locally for context
-    output_file = "extracted_schema.txt"
+    # Save schema text locally for context in the root directory
+    output_file = os.path.join(ROOT_DIR, "extracted_schema.txt")
     with open(output_file, "w") as f:
         f.write(schema_desc)
         
