@@ -17,6 +17,7 @@ from security import encrypt_password
 from services.connection_manager import connection_manager
 from services.schema_discovery import SchemaDiscoveryService
 from services.schema_catalog_builder import SchemaCatalogBuilder
+from services.insights_service import DatabaseInsightsService
 from connectors.factory import build_connector
 
 
@@ -99,7 +100,14 @@ def get_current_catalog(db: Session, database_id: str) -> SchemaCatalog | None:
     )
 
 
-def save_catalog(db: Session, database_id: str, catalog_json: dict, schema_text: str, table_count: int) -> SchemaCatalog:
+def save_catalog(
+    db: Session,
+    database_id: str,
+    catalog_json: dict,
+    schema_text: str,
+    table_count: int,
+    insights_json: dict | None = None,
+) -> SchemaCatalog:
     """
     Mark all previous catalogs for this database as not current,
     then insert a new current catalog (versions are preserved).
@@ -127,6 +135,7 @@ def save_catalog(db: Session, database_id: str, catalog_json: dict, schema_text:
         catalog_json=catalog_json,
         schema_text=schema_text,
         table_count=table_count,
+        insights_json=insights_json,
         is_current=True,
         discovered_at=datetime.utcnow(),
     )
@@ -141,7 +150,7 @@ def save_catalog(db: Session, database_id: str, catalog_json: dict, schema_text:
 def discover_and_save_schema(db: Session, db_record: ConnectedDatabase) -> SchemaCatalog:
     """
     Get (or build) a live engine, run full schema discovery,
-    build catalog + text, save to Supabase, update health status.
+    build catalog + text + insights, save to Supabase, update health status.
     """
     try:
         engine = connection_manager.get_engine(db_record)
@@ -152,7 +161,10 @@ def discover_and_save_schema(db: Session, db_record: ConnectedDatabase) -> Schem
         schema_text = builder.build_text()
         table_count = builder.table_count()
 
-        catalog = save_catalog(db, str(db_record.id), catalog_json, schema_text, table_count)
+        # Compute insights from the catalog (pure computation — no LLM)
+        insights_json = DatabaseInsightsService.generate(catalog_json, str(db_record.db_type.value))
+
+        catalog = save_catalog(db, str(db_record.id), catalog_json, schema_text, table_count, insights_json)
         update_health(db, db_record, HealthStatus.CONNECTED)
         return catalog
 

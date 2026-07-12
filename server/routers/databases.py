@@ -198,3 +198,40 @@ def check_health(
     except Exception as exc:
         update_health(db, record, HealthStatus.FAILED)
         raise HTTPException(status_code=503, detail=f"Connection failed: {exc}")
+
+
+# ── POST /api/databases/{id}/insights/regenerate ──────────────────────────────
+
+@router.post("/{db_id}/insights/regenerate", response_model=DatabaseResponse)
+def regenerate_insights(
+    db_id: str,
+    db: Session = Depends(get_db),
+    owner_id: str = Depends(get_current_user),
+):
+    """
+    Recompute database insights from the current catalog_json without
+    re-running full schema discovery. Fast — pure computation only.
+    """
+    from services.insights_service import DatabaseInsightsService
+
+    record = get_database(db, db_id, owner_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Database not found.")
+
+    catalog = get_current_catalog(db, db_id)
+    if not catalog:
+        raise HTTPException(status_code=404, detail="No schema catalog found. Please refresh the schema first.")
+
+    try:
+        insights_json = DatabaseInsightsService.generate(
+            catalog.catalog_json,
+            str(record.db_type.value),
+        )
+        catalog.insights_json = insights_json
+        db.commit()
+        db.refresh(catalog)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Insights generation failed: {exc}")
+
+    return DatabaseResponse.from_orm_with_catalog(record, catalog)
+

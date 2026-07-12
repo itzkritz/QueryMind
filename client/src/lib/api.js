@@ -145,3 +145,14 @@ export async function deleteHistorySession(sessionId) {
   return res.json();
 }
 
+export async function regenerateInsights(dbId) {
+  const res = await fetch(`${API_BASE}/api/databases/${dbId}/insights/regenerate`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Unknown error" }));
+    throw new Error(err.detail || "Failed to regenerate insights");
+  }
+  return res.json();
+}

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { fetchDatabases, fetchDatabaseSchema, refreshSchema, fetchHealth, deleteDatabase, fetchHistory, deleteHistorySession } from "@/lib/api"
-import { Database, Cpu, Wifi, WifiOff, ChevronRight, Key, Plus, RefreshCw, Layers, MessageSquare, History, Trash2 } from "lucide-react"
+import { Database, Cpu, Wifi, WifiOff, ChevronRight, Key, Plus, RefreshCw, Layers, MessageSquare, History, Trash2, BarChart3 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
@@ -189,6 +189,17 @@ export default function Sidebar({
         >
           <History className="w-4 h-4" />
           Full History log
+        </button>
+        <button
+          onClick={() => onViewChange("insights")}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${
+            activeView === "insights"
+              ? "bg-primary text-primary-foreground border-primary"
+              : "text-muted-foreground hover:bg-accent/40 hover:text-foreground border-transparent"
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          DB Insights
         </button>
       </div>
 

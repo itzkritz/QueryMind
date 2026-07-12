@@ -23,6 +23,7 @@ class SchemaCatalog(Base):
     catalog_json    = Column(JSON, nullable=False)           # Full structured schema (tables, columns, PKs, FKs, row_count, sample_values)
     schema_text     = Column(Text, nullable=True)            # ChromaDB-ready plain text representation
     table_count     = Column(Integer, default=0, nullable=False)
+    insights_json   = Column(JSON, nullable=True)            # Computed database statistics (row counts, relationships, etc.)
     is_current      = Column(Boolean, default=True, nullable=False, index=True)
     discovered_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
 

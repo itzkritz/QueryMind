@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Zap, Plus, Sun, Moon, Sparkles, Layers, History, Database, LogOut, Loader2, MessageSquare } from "lucide-react"
+import { Zap, Plus, Sun, Moon, Sparkles, Layers, History, Database, LogOut, Loader2, MessageSquare, BarChart3 } from "lucide-react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { fetchDatabases, fetchHistory } from "@/lib/api"
 import { useAuth } from "@/hooks/useAuth"
@@ -8,6 +8,7 @@ import Sidebar from "@/components/Sidebar"
 import QueryForm from "@/components/QueryForm"
 import ResultsPanel from "@/components/ResultsPanel"
 import HistoryPage from "@/components/HistoryPage"
+import InsightsPanel from "@/components/InsightsPanel"
 import ConnectDatabaseModal from "@/components/ConnectDatabaseModal"
 import LandingPage from "@/components/LandingPage"
 import { Button } from "@/components/ui/button"
@@ -225,11 +226,13 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 className="text-2xl font-black uppercase tracking-tight text-primary"
               >
-                {activeView === "history" ? "Query History" : "Query Console"}
+                {activeView === "history" ? "Query History" : activeView === "insights" ? "Database Insights" : "Query Console"}
               </motion.h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {activeView === "history" 
-                  ? "Browse and restore your past multi-query chat sessions" 
+                {activeView === "history"
+                  ? "Browse and restore your past multi-query chat sessions"
+                  : activeView === "insights"
+                  ? "Schema overview, row counts, and relationship map for the selected database"
                   : "Ask your database anything in plain English"
                 }
               </p>
@@ -275,6 +278,8 @@ export default function App() {
               databases={databases} 
               onRestoreSession={handleRestoreSession} 
             />
+          ) : activeView === "insights" ? (
+            <InsightsPanel selectedDbId={selectedDbId} />
           ) : (
             <div className="flex-1 px-8 py-6 space-y-6 max-w-5xl w-full mx-auto">
               {/* Input Form at the top of the conversation */}

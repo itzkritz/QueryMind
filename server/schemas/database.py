@@ -7,7 +7,7 @@ Passwords NEVER appear in response schemas.
 
 from __future__ import annotations
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Any
 from pydantic import BaseModel, Field, model_validator
 from config import DatabaseType, HealthStatus
 
@@ -37,6 +37,32 @@ class ConnectDatabaseRequest(BaseModel):
         return self
 
 
+# ── Insights ──────────────────────────────────────────────────────────────────
+
+class TableInsight(BaseModel):
+    name:         str
+    row_count:    int
+    column_count: int
+    fk_count:     int
+
+
+class TableSummary(BaseModel):
+    name:      str
+    row_count: int
+
+
+class DatabaseInsights(BaseModel):
+    total_tables:        int
+    total_columns:       int
+    total_rows:          int
+    largest_table:       Optional[TableSummary] = None
+    smallest_table:      Optional[TableSummary] = None
+    total_relationships: int
+    db_engine:           str
+    tables:              List[TableInsight] = []
+    generated_at:        Optional[str] = None
+
+
 # ── Responses ─────────────────────────────────────────────────────────────────
 
 class DatabaseResponse(BaseModel):
@@ -52,6 +78,7 @@ class DatabaseResponse(BaseModel):
     last_connected_at: Optional[datetime]
     created_at:       datetime
     table_count:      Optional[int] = None
+    insights:         Optional[DatabaseInsights] = None
     # NOTE: encrypted_password and sqlite_file_path are intentionally excluded
 
     class Config:
@@ -59,6 +86,13 @@ class DatabaseResponse(BaseModel):
 
     @classmethod
     def from_orm_with_catalog(cls, record, catalog=None):
+        insights = None
+        if catalog and catalog.insights_json:
+            try:
+                insights = DatabaseInsights(**catalog.insights_json)
+            except Exception:
+                insights = None
+
         return cls(
             id=str(record.id),
             name=record.name,
@@ -72,6 +106,7 @@ class DatabaseResponse(BaseModel):
             last_connected_at=record.last_connected_at,
             created_at=record.created_at,
             table_count=catalog.table_count if catalog else None,
+            insights=insights,
         )
 
 

@@ -47,6 +47,18 @@ if "query_history" in inspector.get_table_names():
                 except Exception as e:
                     print(f"Migration error (sql_explanation column add failed): {e}")
 
+# Self-healing: add insights_json column to schema_catalogs if missing
+if "schema_catalogs" in inspector.get_table_names():
+    sc_cols = [c["name"] for c in inspector.get_columns("schema_catalogs")]
+    if "insights_json" not in sc_cols:
+        print("Migrating schema: Adding insights_json column to schema_catalogs table...")
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("ALTER TABLE schema_catalogs ADD COLUMN insights_json JSON"))
+                conn.commit()
+            except Exception as e:
+                print(f"Migration error (insights_json column add failed): {e}")
+
 # Create all metadata tables in Supabase on startup
 Base.metadata.create_all(bind=engine)
 
