@@ -288,16 +288,16 @@ export default function LandingPage({ theme, toggleTheme }) {
 
             {/* Headline text container — centered on screen */}
             <div className="flex flex-col items-center justify-center text-center w-full">
-              {/* "Speak to" — simple sans font, bright white, same size, weight, and uppercase as below */}
+              {/* "Speak to" — dark: bright white, light: black */}
               <div
-                className="relative text-white font-extrabold leading-none mb-2 uppercase tracking-tight"
+                className="relative dark:text-white text-black font-extrabold leading-none mb-2 uppercase tracking-tight"
                 style={{ fontSize: 'clamp(36px, 6.5vw, 76px)', fontFamily: "Inter, system-ui, sans-serif", letterSpacing: '-0.02em' }}
               >
                 Speak to
               </div>
-              {/* "your data" — simple sans font, same size, weight, and uppercase as above (no full stop) */}
+              {/* "your data" — dark: bright white, light: black */}
               <div
-                className="relative text-white font-extrabold leading-none uppercase tracking-tight"
+                className="relative dark:text-white text-black font-extrabold leading-none uppercase tracking-tight"
                 style={{ fontSize: 'clamp(36px, 6.5vw, 76px)', letterSpacing: '-0.02em', fontFamily: "Inter, system-ui, sans-serif" }}
               >
                 your data
